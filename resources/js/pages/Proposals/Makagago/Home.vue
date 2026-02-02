@@ -1,7 +1,76 @@
-<script setup>
+<script setup lang="ts">
 import Swal from "sweetalert2";
 import { ref, onMounted, onBeforeUnmount, nextTick } from "vue";
 
+/** -----------------------------
+ *  Types
+ * ------------------------------*/
+interface NavItem {
+  label: string;
+  id: string;
+}
+
+interface FeaturedItem {
+  title: string;
+  href: string;
+  thumb: string;
+  note?: string;
+}
+
+interface SeriesItem {
+  name: string;
+  count: string;
+  thumb: string;
+  href: string;
+}
+
+interface SeriesRow {
+  title: string;
+  items: SeriesItem[];
+}
+
+interface MerchItem {
+  name: string;
+  desc: string;
+  price: string;
+  image: string;
+  cta: string;
+  href: string;
+}
+
+interface PartnerItem {
+  name: string;
+  logo: string;
+  link: string;
+}
+
+interface PartnerForm {
+  name: string;
+  brand: string;
+  email: string;
+  budget: string;
+  message: string;
+}
+
+interface FormErrors {
+  name: string;
+  brand: string;
+  email: string;
+  message: string;
+}
+
+interface FormTouched {
+  name: boolean;
+  brand: boolean;
+  email: boolean;
+  message: boolean;
+}
+
+type FormKey = keyof Pick<PartnerForm, "name" | "brand" | "email" | "message">;
+
+/** -----------------------------
+ *  Data
+ * ------------------------------*/
 const brand = {
   name: "Makagago",
   tagline: "Wazzup Man",
@@ -9,7 +78,7 @@ const brand = {
   youtube: "https://www.youtube.com/@MakagagoWazzupMan",
 };
 
-const nav = [
+const nav: NavItem[] = [
   { label: "Home", id: "top" },
   { label: "Featured", id: "featured" },
   { label: "Series", id: "series" },
@@ -18,49 +87,59 @@ const nav = [
   { label: "Partner With Us", id: "partner-with-us" },
 ];
 
-const isLoading = ref(true);
-const loadingFadeOut = ref(false);
+/** -----------------------------
+ *  Loading Splash
+ * ------------------------------*/
+const isLoading = ref<boolean>(true);
+const loadingFadeOut = ref<boolean>(false);
 
-const finishLoading = async () => {
-  // start fade out animation
+const finishLoading = async (): Promise<void> => {
   loadingFadeOut.value = true;
 
-  // wait for fade-out transition
+  // wait for fade out
   setTimeout(() => {
     isLoading.value = false;
 
-    // allow your IntersectionObserver to work correctly after splash is gone
+    // refresh scroll/observer calculations
     nextTick(() => {
       window.dispatchEvent(new Event("scroll"));
     });
   }, 450);
 };
 
-const activeSection = ref("top");
+/** -----------------------------
+ *  Scroll / Active Nav / Back to top
+ * ------------------------------*/
+const activeSection = ref<string>("top");
+const showBackToTop = ref<boolean>(false);
 
-let onScrollHandler = null;
-
-const showBackToTop = ref(false);
-
-// lock observer during programmatic scroll
-const isProgrammaticScroll = ref(false);
-let scrollLockTimer = null;
+// lock observer during programmatic scroll (nav clicks)
+const isProgrammaticScroll = ref<boolean>(false);
+let scrollLockTimer: ReturnType<typeof setTimeout> | null = null;
 
 const headerOffset = 96;
 
-const scrollTo = (id) => {
+// proper TS types for handlers/observer
+let onScrollHandler: (() => void) | null = null;
+let observer: IntersectionObserver | null = null;
+
+/**
+ * Scroll to section with header offset
+ */
+const scrollTo = (id: string): void => {
   const el = document.getElementById(id);
   if (!el) return;
 
   isProgrammaticScroll.value = true;
   activeSection.value = id;
 
-  // 🔹 If going to top, hide back-to-top immediately
+  // If going to top, hide back-to-top immediately
   if (id === "top") {
     showBackToTop.value = false;
   }
 
   const y = el.getBoundingClientRect().top + window.scrollY - headerOffset;
+
   window.scrollTo({ top: y, behavior: "smooth" });
   history.replaceState(null, "", `#${id}`);
 
@@ -68,98 +147,102 @@ const scrollTo = (id) => {
   scrollLockTimer = setTimeout(() => {
     isProgrammaticScroll.value = false;
 
-    // 🔹 Safety check after scroll finishes
+    // Safety: top state after scroll completes
     if (window.scrollY <= 40) {
       showBackToTop.value = false;
       activeSection.value = "top";
+      history.replaceState(null, "", "#top");
+    } else {
+      // Ensure button state is correct after programmatic scroll
+      showBackToTop.value = window.scrollY > 400;
     }
   }, 750);
 };
 
-let observer;
-
-onMounted(() => {
-
-  // splash visible on first load (tweak duration)
-  setTimeout(() => {
-    finishLoading();
-  }, 1000);
-
-  const ids = nav.map((n) => n.id);
-  const sections = ids.map((id) => document.getElementById(id)).filter(Boolean);
-
-  const hash = window.location.hash?.replace("#", "");
-  if (hash && ids.includes(hash)) activeSection.value = hash;
-
-  observer = new IntersectionObserver(
-    (entries) => {
-      if (isProgrammaticScroll.value) return;
-
-      const visible = entries
-        .filter((e) => e.isIntersecting)
-        .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
-
-      if (visible?.target?.id) activeSection.value = visible.target.id;
-    },
-    {
-      root: null,
-      threshold: [0.25, 0.4, 0.55, 0.7],
-      rootMargin: `-${headerOffset}px 0px -60% 0px`,
-    }
-  );
-
-  sections.forEach((sec) => observer.observe(sec));
-
-   onScrollHandler = () => {
-        if (isProgrammaticScroll.value) return;
-
-        const y = window.scrollY;
-
-        // Show button after scrolling down
-        showBackToTop.value = y > 400;
-
-        // Force "Home" active near top
-        if (y <= 40) {
-            activeSection.value = "top";
-            history.replaceState(null, "", "#top");
-        }
-    };
-
-  window.addEventListener("scroll", onScrollHandler, { passive: true });
-});
-
-onBeforeUnmount(() => {
-  if (onScrollHandler) window.removeEventListener("scroll", onScrollHandler);
-  if (observer) observer.disconnect();
-  if (scrollLockTimer) clearTimeout(scrollLockTimer);
-});
-
-const featured = [
-  { title: "NORMAN MANGUSIN SINAGOT NA NI MANNY PACQUIAO ", href: "https://www.youtube.com/watch?v=PCSYa7PT8gI", thumb: "/images/makagago/featured-video-2.avif", note: "" },
-  { title: "NORMAN MANGUSIN HINAMON SI MANNY PACQUIAO", href: "https://www.youtube.com/watch?v=1gec39fotzw", thumb: "/images/makagago/featured-video-1.avif", note: "" },
-  { title: "NORMAN MANGUSIN ITINANGGI ANG MOMMY NYA", href: "https://www.youtube.com/watch?v=NaNr3Nag2Ks", thumb: "/images/makagago/featured-video-3.avif", note: "" },
+/** -----------------------------
+ *  Content Lists
+ * ------------------------------*/
+const featured: FeaturedItem[] = [
+  {
+    title: "NORMAN MANGUSIN SINAGOT NA NI MANNY PACQUIAO",
+    href: "https://www.youtube.com/watch?v=PCSYa7PT8gI",
+    thumb: "/images/makagago/featured-video-2.avif",
+    note: "",
+  },
+  {
+    title: "NORMAN MANGUSIN HINAMON SI MANNY PACQUIAO",
+    href: "https://www.youtube.com/watch?v=1gec39fotzw",
+    thumb: "/images/makagago/featured-video-1.avif",
+    note: "",
+  },
+  {
+    title: "NORMAN MANGUSIN ITINANGGI ANG MOMMY NYA",
+    href: "https://www.youtube.com/watch?v=NaNr3Nag2Ks",
+    thumb: "/images/makagago/featured-video-3.avif",
+    note: "",
+  },
 ];
 
-const seriesRows = [
+const seriesRows: SeriesRow[] = [
   {
     title: "Episodes",
     items: [
-      { name: "FRANCIS LEO MARCOS EPISODES", count: "62 videos", thumb: "/images/makagago/series/flm-series.jpg", href: "https://www.youtube.com/watch?v=vKSA-e41zTI&list=PLvhbEtwm1bb6zdhISxA2FQ2ayuoAU8Rw6" },
-      { name: "THE RISE AND FALL EPISODES", count: "14 videos", thumb: "/images/makagago/series/rise-and-fall-series.jpg", href: "https://www.youtube.com/watch?v=lgS3Fntii-E&list=PLvhbEtwm1bb7_byrjfun8g4ppAT-P04kS" },
-      { name: "Reality Quest", count: "6 videos", thumb: "/images/makagago/series/reality-quest-series.jpg", href: "https://www.youtube.com/watch?v=L-slt4YwoLA&list=PLvhbEtwm1bb5M3vePLzQ3Dut9Wus7rKNm" },
-      { name: "NICO DAVID EPISODES", count: "4 videos", thumb: "/images/makagago/series/nico-david-series.jpg", href: "https://www.youtube.com/watch?v=OOM9cmy_TXk&list=PLvhbEtwm1bb55tXe6WFeL0yc9WHt2De1u" },
-      { name: "ATO EPISODES", count: "5 videos", thumb: "/images/makagago/series/ato-series.jpg", href: "https://www.youtube.com/watch?v=n-BJ_2SzE94&list=PLvhbEtwm1bb6LCz-TOIpXjGliHfqowS7J" },
-      { name: "WHAMOS CRUZ EPISODES", count: "5 videos", thumb: "/images/makagago/series/whamos-series.jpg", href: "https://www.youtube.com/watch?v=XLcBS4gzULk&list=PLvhbEtwm1bb7bbU9wUmdcnc_WesBW_T8A" },
-      { name: "PIO BALBUENA EPISODES", count: "6 videos", thumb: "/images/makagago/series/pio-series.jpg", href: "https://www.youtube.com/watch?v=M6-gZFQapQ4&list=PLvhbEtwm1bb6zMqMk0Kr3ZKBhiY7QNhYo" },
-      { name: "BUGOY NA KOYKOY EPISODES", count: "2 videos", thumb: "/images/makagago/series/bugoy-series.jpg", href: "https://www.youtube.com/watch?v=PcuKmWBTohE&list=PLvhbEtwm1bb7USrJRr1FG31MtmebBtKHt" },
+      {
+        name: "FRANCIS LEO MARCOS EPISODES",
+        count: "62 videos",
+        thumb: "/images/makagago/series/flm-series.jpg",
+        href: "https://www.youtube.com/watch?v=vKSA-e41zTI&list=PLvhbEtwm1bb6zdhISxA2FQ2ayuoAU8Rw6",
+      },
+      {
+        name: "THE RISE AND FALL EPISODES",
+        count: "14 videos",
+        thumb: "/images/makagago/series/rise-and-fall-series.jpg",
+        href: "https://www.youtube.com/watch?v=lgS3Fntii-E&list=PLvhbEtwm1bb7_byrjfun8g4ppAT-P04kS",
+      },
+      {
+        name: "Reality Quest",
+        count: "6 videos",
+        thumb: "/images/makagago/series/reality-quest-series.jpg",
+        href: "https://www.youtube.com/watch?v=L-slt4YwoLA&list=PLvhbEtwm1bb5M3vePLzQ3Dut9Wus7rKNm",
+      },
+      {
+        name: "NICO DAVID EPISODES",
+        count: "4 videos",
+        thumb: "/images/makagago/series/nico-david-series.jpg",
+        href: "https://www.youtube.com/watch?v=OOM9cmy_TXk&list=PLvhbEtwm1bb55tXe6WFeL0yc9WHt2De1u",
+      },
+      {
+        name: "ATO EPISODES",
+        count: "5 videos",
+        thumb: "/images/makagago/series/ato-series.jpg",
+        href: "https://www.youtube.com/watch?v=n-BJ_2SzE94&list=PLvhbEtwm1bb6LCz-TOIpXjGliHfqowS7J",
+      },
+      {
+        name: "WHAMOS CRUZ EPISODES",
+        count: "5 videos",
+        thumb: "/images/makagago/series/whamos-series.jpg",
+        href: "https://www.youtube.com/watch?v=XLcBS4gzULk&list=PLvhbEtwm1bb7bbU9wUmdcnc_WesBW_T8A",
+      },
+      {
+        name: "PIO BALBUENA EPISODES",
+        count: "6 videos",
+        thumb: "/images/makagago/series/pio-series.jpg",
+        href: "https://www.youtube.com/watch?v=M6-gZFQapQ4&list=PLvhbEtwm1bb6zMqMk0Kr3ZKBhiY7QNhYo",
+      },
+      {
+        name: "BUGOY NA KOYKOY EPISODES",
+        count: "2 videos",
+        thumb: "/images/makagago/series/bugoy-series.jpg",
+        href: "https://www.youtube.com/watch?v=PcuKmWBTohE&list=PLvhbEtwm1bb7USrJRr1FG31MtmebBtKHt",
+      },
     ],
   },
 ];
 
-const merch = [
+const merch: MerchItem[] = [
   {
     name: "Repent (Black)",
-    desc: "Comfortable black t-shirt —  bold white print.",
+    desc: "Comfortable black t-shirt — bold white print.",
     price: "PHP 750",
     image: "/images/makagago/merch/repent-black.jpg",
     cta: "Chat to our Facebook Page",
@@ -167,26 +250,36 @@ const merch = [
   },
   {
     name: "The Biggest (White)",
-    desc: "Comfortable white t-shirt —  bold black print.",
+    desc: "Comfortable white t-shirt — bold black print.",
     price: "PHP 650",
     image: "/images/makagago/merch/the-biggest-white.jpg",
     cta: "Chat to our Facebook Page",
     href: "https://www.messenger.com/t/792285597310101",
-  }
+  },
 ];
 
-const scrollRow = (id, dir = 1) => {
+const partners: PartnerItem[] = [
+  {
+    name: "Manny Pay",
+    logo: "/images/makagago/partners/mannypay.png",
+    link: "https://www.mannypay.ph/",
+  },
+];
+
+/**
+ * Horizontal row scroller (for series)
+ */
+const scrollRow = (id: string, dir: number = 1): void => {
   const el = document.getElementById(id);
   if (!el) return;
   const amount = Math.round(el.clientWidth * 0.9) * dir;
   el.scrollBy({ left: amount, behavior: "smooth" });
 };
 
-const partners = [
-  { name: "Manny Pay", logo: "/images/makagago/partners/mannypay.png", link:"https://www.mannypay.ph/" },
-];
-
-const form = ref({
+/** -----------------------------
+ *  Form + Validation + SweetAlert
+ * ------------------------------*/
+const form = ref<PartnerForm>({
   name: "",
   brand: "",
   email: "",
@@ -194,26 +287,26 @@ const form = ref({
   message: "",
 });
 
-const errors = ref({
+const errors = ref<FormErrors>({
   name: "",
   brand: "",
   email: "",
   message: "",
 });
 
-const touched = ref({
+const touched = ref<FormTouched>({
   name: false,
   brand: false,
   email: false,
   message: false,
 });
 
-const isValidEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+const isValidEmail = (email: string): boolean =>
+  /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 
-const validateField = (key) => {
-  const value = (form.value[key] || "").trim();
+const validateField = (key: FormKey): void => {
+  const value = (form.value[key] ?? "").trim();
 
-  // reset
   errors.value[key] = "";
 
   if (key === "name" && value.length < 2) errors.value.name = "Please enter your name.";
@@ -222,9 +315,10 @@ const validateField = (key) => {
   if (key === "message" && value.length < 10) errors.value.message = "Please write a short message (10+ chars).";
 };
 
-const validateForm = () => {
-  // mark all as touched
-  Object.keys(touched.value).forEach((k) => (touched.value[k] = true));
+const validateForm = (): boolean => {
+  (Object.keys(touched.value) as Array<keyof FormTouched>).forEach((k) => {
+    touched.value[k] = true;
+  });
 
   validateField("name");
   validateField("brand");
@@ -234,9 +328,9 @@ const validateForm = () => {
   return !errors.value.name && !errors.value.brand && !errors.value.email && !errors.value.message;
 };
 
-const submitting = ref(false);
+const submitting = ref<boolean>(false);
 
-const submitPartnerWithUs = async () => {
+const submitPartnerWithUs = async (): Promise<void> => {
   if (!validateForm()) {
     await Swal.fire({
       icon: "error",
@@ -249,7 +343,6 @@ const submitPartnerWithUs = async () => {
 
   submitting.value = true;
 
-  // DEMO: simulate submit delay
   setTimeout(async () => {
     submitting.value = false;
 
@@ -260,14 +353,79 @@ const submitPartnerWithUs = async () => {
       confirmButtonText: "Got it",
     });
 
-    // reset form
     form.value = { name: "", brand: "", email: "", budget: "", message: "" };
 
-    // reset touched + errors
-    Object.keys(touched.value).forEach((k) => (touched.value[k] = false));
-    Object.keys(errors.value).forEach((k) => (errors.value[k] = ""));
+    (Object.keys(touched.value) as Array<keyof FormTouched>).forEach((k) => {
+      touched.value[k] = false;
+    });
+
+    (Object.keys(errors.value) as Array<keyof FormErrors>).forEach((k) => {
+      errors.value[k] = "";
+    });
   }, 650);
 };
+
+/** -----------------------------
+ *  Lifecycle: mount/unmount
+ * ------------------------------*/
+onMounted(() => {
+  // splash visible on first load
+  setTimeout(() => {
+    finishLoading();
+  }, 1500);
+
+  const ids = nav.map((n) => n.id);
+  const sections = ids.map((id) => document.getElementById(id)).filter(Boolean) as HTMLElement[];
+
+  // Set initial active if URL has hash
+  const hash = window.location.hash?.replace("#", "");
+  if (hash && ids.includes(hash)) activeSection.value = hash;
+
+  observer = new IntersectionObserver(
+    (entries) => {
+      if (isProgrammaticScroll.value) return;
+
+      const visible = entries
+        .filter((e) => e.isIntersecting)
+        .sort((a, b) => (b.intersectionRatio ?? 0) - (a.intersectionRatio ?? 0))[0];
+
+      if (visible?.target && (visible.target as HTMLElement).id) {
+        activeSection.value = (visible.target as HTMLElement).id;
+      }
+    },
+    {
+      root: null,
+      threshold: [0.25, 0.4, 0.55, 0.7],
+      rootMargin: `-${headerOffset}px 0px -60% 0px`,
+    }
+  );
+
+  sections.forEach((sec) => observer?.observe(sec));
+
+  onScrollHandler = () => {
+    // NOTE: we do NOT early-return here, otherwise back-to-top won't update while programmatic scrolling.
+    // We only avoid changing activeSection during programmatic scroll.
+    const y = window.scrollY;
+
+    showBackToTop.value = y > 400;
+
+    if (!isProgrammaticScroll.value && y <= 40) {
+      activeSection.value = "top";
+      history.replaceState(null, "", "#top");
+    }
+  };
+
+  window.addEventListener("scroll", onScrollHandler, { passive: true });
+
+  // initial state
+  window.dispatchEvent(new Event("scroll"));
+});
+
+onBeforeUnmount(() => {
+  if (onScrollHandler) window.removeEventListener("scroll", onScrollHandler);
+  if (observer) observer.disconnect();
+  if (scrollLockTimer) clearTimeout(scrollLockTimer);
+});
 </script>
 
 <template>
