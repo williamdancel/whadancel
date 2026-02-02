@@ -1,6 +1,6 @@
 <script setup>
-import { ref, onMounted, onBeforeUnmount, nextTick } from "vue";
 import Swal from "sweetalert2";
+import { ref, onMounted, onBeforeUnmount, nextTick } from "vue";
 
 const brand = {
   name: "Makagago",
@@ -386,7 +386,7 @@ const submitPartnerWithUs = async () => {
           </h2>
 
           <p class="mt-5 max-w-2xl text-neutral-300 leading-relaxed">
-            No sugar-coating. Just real talk, viral callouts, and stories you won’t hear anywhere else. Wassup mga kahombre.
+            No sugar-coating. Just real talk, viral callouts, and stories you won’t hear anywhere else. Wazzup mga kahombre.
           </p>
 
           <div class="mt-8 flex flex-wrap gap-3">
