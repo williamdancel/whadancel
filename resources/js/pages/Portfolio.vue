@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 const profile = {
   name: "William Harry A. Dancel",
   role: "PHP Developer | Remote-First",
